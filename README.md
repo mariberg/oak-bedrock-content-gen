@@ -9,6 +9,8 @@ processed in two steps - Nova Lite model will first extract the questions, descr
 create a new similar question - answer pair and image description. Nova Canvas will then be used to create an image based
 on the description using the original image as a 'conditioning image'. 
 
+Further details about the experimental project is available in this [blog article](https://blog.marikabergman.com/maths-revision-material-via-amazon-nova-an-experiment).
+
 ![quiz_creation](./images/quiz_creation.png)
 
 ## Oak-pdf-processor
