@@ -1,0 +1,60 @@
+# Byte-compiled / optimized / pickled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+.eggs/
+lib64/
+lib/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.whl
+venv/
+.venv/
+env/
+*/env/
+*/.venv/
+*/venv/
+
+# Log files
+*.log
+*.tmp
+temp/
+tmp/
+
+# OS specifics
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+$RECYCLE.BIN/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+*.iml
+
+# MyPy cache
+.mypy_cache/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Other temporary files that might be created
+*.swp
+*.bak
+*.dump
+*.patch
+*.orig
+*.rej

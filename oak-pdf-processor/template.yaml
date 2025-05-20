@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Stack for Oak Academy PDF processor'
+
+Parameters:
+  OakApiKey:
+    Type: String
+    Description: API Key for Oak Academy
+    NoEcho: true
+  OakApiUrl:
+    Type: String
+    Description: Oak Academy API URL
+    Default: 'https://open-api.thenational.academy/api/v0'
+
+Resources:
+  ProcessorBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-pdf-storage'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub '${ProcessorBucket.Arn}/*'
+
+  PdfProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-pdf-processor'
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code: 
+        S3Bucket: oakcodebucket
+        S3Key: 'pdf-processor.zip'
+      Environment:
+        Variables:
+          OAK_API_KEY: !Ref OakApiKey
+          S3_BUCKET_NAME: !Ref ProcessorBucket
+          OAK_API_URL: !Ref OakApiUrl
+      MemorySize: 3008
+      Timeout: 600
+
+Outputs:
+  BucketName:
+    Description: Name of the created S3 bucket
+    Value: !Ref ProcessorBucket
+  LambdaFunction:
+    Description: Name of the created Lambda function
+    Value: !Ref PdfProcessorFunction
+  LambdaArn:
+    Description: ARN of the created Lambda function
+    Value: !GetAtt PdfProcessorFunction.Arn

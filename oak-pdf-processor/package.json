@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@smithy/node-http-handler": "^4.0.4",
+    "p-limit": "^6.2.0"
+  }
+}
