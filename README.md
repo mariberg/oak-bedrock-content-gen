@@ -1,8 +1,13 @@
 # Oak Bedrock Content Gen
 
-The idea of this project is to use material from Oak National Academy's open API to create revision content with the help of AI.
+The idea of this project is to use material from Oak National Academy's open API to create revision content by utilizing two
+Amazon Bedrock Nova models as described in the below diagram.
+
 The material contains exit quizzes for maths lessons based on UK curriculum. These exit quizzes containt questions and answers
-and most of the exercises contain also an image that the pupil can use to work through the question.
+and most of the exercises contain also an image that pupils can use to work through the question. The quizzes will be
+processed in two steps - Nova Lite model will first extract the questions, describe images and based on those details
+create a new similar question - answer pair and image description. Nova Canvas will then be used to create an image based
+on the description using the original image as a 'conditioning image'. 
 
 ![quiz_creation](./images/quiz_creation.png)
 
