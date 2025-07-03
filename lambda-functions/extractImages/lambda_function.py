@@ -5,11 +5,34 @@ import os
 import io
 import pdfplumber
 import json
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 s3 = boto3.client('s3')
-SOURCE_S3_BUCKET = 'oak-pdf-importer-pdf-storage'  # Replace with your source bucket name
-DESTINATION_S3_BUCKET = 'oak-extracted-images'  # Replace with your destination bucket name
-DESTINATION_S3_PREFIX = 'extracted_images/'  # Optional prefix for images in the destination bucket
+
+def validate_environment_variables():
+    """
+    Validate that all required environment variables are present.
+    Raises ValueError with descriptive message if any are missing.
+    """
+    required_vars = ['PDF_STORAGE_BUCKET', 'IMAGE_STORAGE_BUCKET']
+    missing_vars = []
+    
+    for var in required_vars:
+        if not os.environ.get(var):
+            missing_vars.append(var)
+    
+    if missing_vars:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+    
+    return {
+        'pdf_storage_bucket': os.environ.get('PDF_STORAGE_BUCKET'),
+        'image_storage_bucket': os.environ.get('IMAGE_STORAGE_BUCKET'),
+        'image_prefix': os.environ.get('IMAGE_PREFIX', 'extracted_images/')
+    }
 
 def lambda_handler(event, context):
     """
@@ -25,11 +48,26 @@ def lambda_handler(event, context):
         dict: A JSON string containing a list of JSON objects, each with 'image-ref' (S3 URI)
               and 'caption'.
     """
+    try:
+        # Validate environment variables at function startup
+        env_vars = validate_environment_variables()
+        logger.info("Environment variables validated successfully")
+    except ValueError as e:
+        logger.error(f"Environment validation failed: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f"Configuration error: {e}"})
+        }
+    
+    source_bucket = env_vars['pdf_storage_bucket']
+    destination_bucket = env_vars['image_storage_bucket']
+    destination_prefix = env_vars['image_prefix']
+    
     output_data = []
 
     try:
         paginator = s3.get_paginator('list_objects_v2')
-        pages = paginator.paginate(Bucket=SOURCE_S3_BUCKET)
+        pages = paginator.paginate(Bucket=source_bucket)
 
         pdf_files = []
         for page in pages:
@@ -38,12 +76,12 @@ def lambda_handler(event, context):
                     if obj['Key'].lower().endswith('.pdf'):
                         pdf_files.append(obj['Key'])
 
-        print(f"Found {len(pdf_files)} PDF files in s3://{SOURCE_S3_BUCKET}: {pdf_files}")
+        logger.info(f"Found {len(pdf_files)} PDF files in s3://{source_bucket}: {pdf_files}")
 
         for pdf_key in pdf_files:
-            print(f"Processing: {pdf_key}")
+            logger.info(f"Processing: {pdf_key}")
             try:
-                pdf_object = s3.get_object(Bucket=SOURCE_S3_BUCKET, Key=pdf_key)
+                pdf_object = s3.get_object(Bucket=source_bucket, Key=pdf_key)
                 pdf_bytes = io.BytesIO(pdf_object['Body'].read())
 
                 with pdfplumber.open(pdf_bytes) as pdf:
@@ -51,11 +89,11 @@ def lambda_handler(event, context):
                         for i, image in enumerate(page.images):
                             image_name = f"{os.path.splitext(os.path.basename(pdf_key))[0]}_page_{page_num + 1}_image_{i + 1}.{image['filetype'].lower()}"
                             image_bytes = image['content']
-                            destination_key = f"{DESTINATION_S3_PREFIX}{image_name}"
+                            destination_key = f"{destination_prefix}{image_name}"
 
                             # Upload image to the destination S3 bucket
-                            s3.put_object(Bucket=DESTINATION_S3_BUCKET, Key=destination_key, Body=image_bytes)
-                            s3_uri = f"s3://{DESTINATION_S3_BUCKET}/{destination_key}"
+                            s3.put_object(Bucket=destination_bucket, Key=destination_key, Body=image_bytes)
+                            s3_uri = f"s3://{destination_bucket}/{destination_key}"
 
                             # Extract nearby text for caption
                             image_bbox = (image['x0'], image['top'], image['x1'], image['bottom'])
@@ -74,12 +112,13 @@ def lambda_handler(event, context):
                                 })
 
             except Exception as e:
-                print(f"Error processing {pdf_key}: {e}")
+                logger.error(f"Error processing {pdf_key}: {e}")
 
     except Exception as e:
+        logger.error(f"Error listing or processing S3 objects: {e}")
         return {
             'statusCode': 500,
-            'body': json.dumps(f"Error listing or processing S3 objects: {e}")
+            'body': json.dumps({'error': f"Error listing or processing S3 objects: {e}"})
         }
 
     return {

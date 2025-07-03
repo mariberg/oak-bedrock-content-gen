@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import os
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -13,6 +14,25 @@ class ImageError(Exception):
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+def validate_environment_variables():
+    """
+    Validate that all required environment variables are present.
+    Raises ValueError with descriptive message if any are missing.
+    """
+    required_vars = ['IMAGE_STORAGE_BUCKET']
+    missing_vars = []
+    
+    for var in required_vars:
+        if not os.environ.get(var):
+            missing_vars.append(var)
+    
+    if missing_vars:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+    
+    return {
+        'image_storage_bucket': os.environ.get('IMAGE_STORAGE_BUCKET')
+    }
 
 def generate_base64_image(model_id, body):
     """
@@ -65,6 +85,17 @@ def lambda_handler(event, context):
     """
     Lambda handler function that generates a base64 encoded image based on a prompt and an optional condition image from S3.
     """
+    try:
+        # Validate environment variables at function startup
+        env_vars = validate_environment_variables()
+        logger.info("Environment variables validated successfully")
+    except ValueError as e:
+        logger.error(f"Environment validation failed: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': f"Configuration error: {e}"})
+        }
+    
     model_id = 'amazon.nova-canvas-v1:0'
     content_prompt = event.get('content_prompt')
     style_prompt = event.get('style', "simple, non-realistic illustration suitable for children's math practice with clear, countable objects and minimal background.") # Default style if not provided

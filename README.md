@@ -20,14 +20,11 @@ Further details about the experimental project is available in this [blog articl
 
 This project is comprised of several AWS Lambda functions, each residing in its own dedicated sub-folder.
 
-**Important Note on Infrastructure:**
-Currently, this repository **does not include Infrastructure as Code (IaC)**. The AWS resources (Lambda functions, S3 buckets, IAM roles) need to be provisioned manually. The names of other AWS resources are presently hardcoded within the Lambda function code.
+**Infrastructure as Code:**
+This project includes Infrastructure as Code (IaC) using AWS CloudFormation. All AWS resources (Lambda functions, S3 buckets, IAM roles) are automatically provisioned and configured through the deployment scripts.
 
-Below, you'll find descriptions of each Lambda function along with the necessary AWS IAM permissions required for them to interact with other AWS resources.
-
-**Required Manual Setup:**
-* You need to create **two S3 buckets** that are essential for this project to function.
-* The names of these buckets (and potentially other resources) are hardcoded. Future improvements will address this through configuration or IaC.
+**Automated Deployment:**
+The project includes automated deployment scripts that handle packaging Lambda functions, uploading to S3, and deploying the CloudFormation stack.
 
 
 ## Oak-pdf-processor
@@ -37,33 +34,79 @@ Currently the API is in beta and only exit quizzes for year groups 1 and 2 were 
 available resources. When the rest of the resources are available at the API, further filtering is required to get only one
 year group at the time.
 
-Permissions:
-- Ensure your IAM role has necessary 'putObject' permissions to the S3 bucket
-
-
 ## Describe Quiz
 
 This Lambda function calls the Amazon Bedrock Nova Lite model. The model will read one of the pdf files and write one of the question, determine a correct answer to the question and describe the image that is associated to the question. In addition,
 it will create a new similar question - answer pair and create a description for an image that could be used with that question.
 
-Permissions:
-- Ensure your IAM role has necessary 'getObject' permissions to the S3 bucket
-- Ensure your IAM role has the necessary permissions to access Amazon Bedrock and the specific models you are using
-
 ## createNewImage
 
 This lambda function calls the Amazon Bedrock Nova Canvas model. This model is able to create images based on image and text input. The function uses the original image as the conditioning image. The text prompt is created combining a general prompt that describes the style and purpose of the image and a content prompt that comes from the output of Nova Lite Model. 
 
-Permissions: Ensure your IAM role has the necessary permissions to access Amazon Bedrock and the specific models you are using
+## extractImages
 
-## WIP - extraImages
+This Lambda function extracts images from the pdf files and saves them in a separate S3 bucket for further processing.
 
-**WIP** This Lambda function extracts images from the pdf files and saves then in a separate S3 bucket. 
+## Deployment
+
+### Prerequisites
+- AWS CLI configured with appropriate permissions
+- AWS SSO login (if using SSO)
+- Node.js and npm (for Node.js functions)
+- Python 3 and pip3 (for Python functions)
+- Oak Academy API key
+
+### Deployment Commands
+
+1. **Set up your environment:**
+   ```bash
+   # Login to AWS SSO (if using SSO)
+   aws sso login --profile your-profile-name
+   
+   # Set your AWS profile and API key
+   export AWS_PROFILE=your-profile-name
+   export OAK_API_KEY="your-oak-academy-api-key"
+   ```
+
+2. **Package Lambda functions:**
+   ```bash
+   ./scripts/package-functions.sh
+   ```
+
+3. **Deploy to AWS:**
+   ```bash
+   # Deploy to us-east-1 (default)
+   ./scripts/deploy.sh -r us-east-1
+   
+   # Or deploy with specific package timestamp
+   ./scripts/deploy.sh -r us-east-1 -t YYYYMMDD-HHMMSS
+   
+   # Or deploy to different region
+   ./scripts/deploy.sh -r us-west-2
+   ```
+
+4. **Complete deployment command:**
+   ```bash
+   export AWS_PROFILE=your-profile-name
+   export OAK_API_KEY="your-api-key"
+   ./scripts/package-functions.sh && ./scripts/deploy.sh -r us-east-1
+   ```
+
+### Deployment Scripts
+- `scripts/package-functions.sh` - Packages all Lambda functions with dependencies
+- `scripts/deploy.sh` - Uploads packages and deploys CloudFormation stack
+- See `scripts/README.md` for detailed documentation
+
+### Infrastructure Components
+The CloudFormation template creates:
+- **S3 Buckets**: PDF storage, image storage, and code storage
+- **Lambda Functions**: All four processing functions with proper IAM roles
+- **IAM Roles**: Least-privilege access for each function
+- **Environment Variables**: Proper configuration for all functions 
 
 
-## Future Enhancements / Roadmap
+## Next Steps
 
-* **Infrastructure as Code (IaC):** Implement IaC using AWS Cloudformation to automate the deployment and management of all AWS resources. This will significantly improve reproducibility and maintainability.
-* **Parameterization/Configuration:** Externalize hardcoded resource names (e.g., S3 bucket names, API keys) into environment variables.
-* **Error Handling and Logging:** Enhance error handling within Lambda functions and improve logging for better observability and debugging.
-* **API Gateway:** Consider exposing some functionality via API Gateway for external interaction.
+- **Frontend Application:** Create a web application that displays quiz questions and allows users to interact with the generated content
+- **API Gateway Integration:** Add AWS API Gateway to provide RESTful endpoints for the frontend application to connect to the Lambda functions
+- **End-to-End Testing:** Test the complete workflow from PDF processing through question generation to image creation

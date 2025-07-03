@@ -1,0 +1,5 @@
+{
+  "OakApiUrl": "https://open-api.thenational.academy/api/v0",
+  "LambdaMemorySize": "3008",
+  "LambdaTimeout": "600"
+}

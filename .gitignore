@@ -59,3 +59,9 @@ $RECYCLE.BIN/
 *.orig
 *.rej
 *.kiro
+
+# Configuration files with sensitive data
+parameters.json
+*-parameters.json
+*.local.json
+deployment-info-*.json

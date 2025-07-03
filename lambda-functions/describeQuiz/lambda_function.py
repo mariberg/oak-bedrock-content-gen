@@ -2,8 +2,33 @@ import boto3
 import json
 import uuid
 import base64
+import os
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 s3 = boto3.client('s3')
+
+def validate_environment_variables():
+    """
+    Validate that all required environment variables are present.
+    Raises ValueError with descriptive message if any are missing.
+    """
+    required_vars = ['BUCKET_OWNER']
+    missing_vars = []
+    
+    for var in required_vars:
+        if not os.environ.get(var):
+            missing_vars.append(var)
+    
+    if missing_vars:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+    
+    return {
+        'bucket_owner': os.environ.get('BUCKET_OWNER')
+    }
 
 def lambda_handler(event, context):
     """
@@ -18,14 +43,27 @@ def lambda_handler(event, context):
     Parameters:
     - event: The event data passed to the Lambda function. It should contain:
       - 's3_uri': The S3 URI of the PDF document (e.g., 's3://bucket-name/path/to/file.pdf').
-      - 'bucket_owner': The AWS account ID of the bucket owner.
       - 'question_number': The index (starting from 1) of the question to process.
     - context: The runtime information provided by AWS Lambda (not directly used in the current implementation).
+    
+    Environment Variables:
+    - 'BUCKET_OWNER': The AWS account ID of the bucket owner.
 
     Returns:
     - A dictionary with statusCode and body containing the analysis result in JSON format.
     """
     try:
+        # Validate environment variables at function startup
+        try:
+            env_vars = validate_environment_variables()
+            logger.info("Environment variables validated successfully")
+        except ValueError as e:
+            logger.error(f"Environment validation failed: {e}")
+            return {
+                'statusCode': 500,
+                'body': json.dumps({'error': f"Configuration error: {e}"})
+            }
+        
         client = boto3.client(
             "bedrock-runtime",
             region_name="us-east-1",
@@ -33,11 +71,11 @@ def lambda_handler(event, context):
         MODEL_ID = "us.amazon.nova-lite-v1:0"
 
         s3_uri = event.get('s3_uri')
-        bucket_owner = event.get('bucket_owner')
+        bucket_owner = env_vars['bucket_owner']
         question_number = event.get('question_number', 1)  # Default to the first question if not provided
 
-        if not s3_uri or not bucket_owner:
-            raise ValueError("Both 's3_uri' and 'bucket_owner' must be provided in the event.")
+        if not s3_uri:
+            raise ValueError("'s3_uri' must be provided in the event.")
 
         s3_location_parts = s3_uri.replace("s3://", "").split("/")
         bucket_name = s3_location_parts[0]

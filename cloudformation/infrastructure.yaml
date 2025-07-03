@@ -1,0 +1,436 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Comprehensive CloudFormation stack for Oak Bedrock Content Gen project'
+
+Parameters:
+  # Oak Academy API Configuration
+  OakApiKey:
+    Type: String
+    Description: API Key for Oak Academy
+    NoEcho: true
+  
+  OakApiUrl:
+    Type: String
+    Description: Oak Academy API URL
+    Default: 'https://open-api.thenational.academy/api/v0'
+  
+  # Lambda Function Sizing Parameters
+  LambdaMemorySize:
+    Type: Number
+    Description: Memory size for Lambda functions (MB)
+    Default: 3008
+    MinValue: 128
+    MaxValue: 10240
+  
+  LambdaTimeout:
+    Type: Number
+    Description: Timeout for Lambda functions (seconds)
+    Default: 600
+    MinValue: 3
+    MaxValue: 900
+  
+  # Code Storage Configuration
+  CodeStorageBucket:
+    Type: String
+    Description: S3 bucket name for Lambda deployment packages
+    Default: ''
+  
+  # Lambda Package Keys
+  OakPdfProcessorPackageKey:
+    Type: String
+    Description: S3 key for oak-pdf-processor deployment package
+    Default: 'packages/oak-pdf-processor.zip'
+  
+  DescribeQuizPackageKey:
+    Type: String
+    Description: S3 key for describeQuiz deployment package
+    Default: 'packages/describeQuiz.zip'
+  
+  CreateNewImagePackageKey:
+    Type: String
+    Description: S3 key for createNewImage deployment package
+    Default: 'packages/createNewImage.zip'
+  
+  ExtractImagesPackageKey:
+    Type: String
+    Description: S3 key for extractImages deployment package
+    Default: 'packages/extractImages.zip'
+
+Conditions:
+  CreateCodeBucket: !Equals [!Ref CodeStorageBucket, '']
+
+Resources:
+  # S3 Buckets
+  PdfStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-pdf-storage'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  ImageStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-image-storage'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  CodeStorageBucketResource:
+    Type: AWS::S3::Bucket
+    Condition: CreateCodeBucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-code-storage'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  # IAM Roles with Least-Privilege Permissions
+  
+  # Oak PDF Processor Role
+  OakPdfProcessorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-oak-pdf-processor-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3PdfStorageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub '${PdfStorageBucket.Arn}/*'
+
+  # Describe Quiz Role
+  DescribeQuizRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-describe-quiz-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3PdfStorageReadAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub '${PdfStorageBucket.Arn}/*'
+        - PolicyName: BedrockNovaLiteAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: 
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/us.amazon.nova-lite-v1:0'
+
+  # Create New Image Role
+  CreateNewImageRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-create-new-image-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3ImageStorageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: 
+                  - !Sub '${PdfStorageBucket.Arn}/*'
+                  - !Sub '${ImageStorageBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub '${ImageStorageBucket.Arn}/*'
+        - PolicyName: BedrockNovaCanvasAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: 
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-canvas-v1:0'
+
+  # Extract Images Role
+  ExtractImagesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-extract-images-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3ExtractImagesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub '${PdfStorageBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub '${PdfStorageBucket.Arn}'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub '${ImageStorageBucket.Arn}/*'
+
+  # Lambda Functions
+  
+  # Oak PDF Processor Function
+  OakPdfProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-oak-pdf-processor'
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt OakPdfProcessorRole.Arn
+      Code: 
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref OakPdfProcessorPackageKey
+      Environment:
+        Variables:
+          OAK_API_KEY: !Ref OakApiKey
+          OAK_API_URL: !Ref OakApiUrl
+          S3_BUCKET_NAME: !Ref PdfStorageBucket
+          PDF_STORAGE_BUCKET: !Ref PdfStorageBucket
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+  # Describe Quiz Function
+  DescribeQuizFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-describe-quiz'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt DescribeQuizRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref DescribeQuizPackageKey
+      Environment:
+        Variables:
+          BUCKET_OWNER: !Ref AWS::AccountId
+          PDF_STORAGE_BUCKET: !Ref PdfStorageBucket
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+  # Create New Image Function
+  CreateNewImageFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-create-new-image'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt CreateNewImageRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref CreateNewImagePackageKey
+      Environment:
+        Variables:
+          PDF_STORAGE_BUCKET: !Ref PdfStorageBucket
+          IMAGE_STORAGE_BUCKET: !Ref ImageStorageBucket
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+  # Extract Images Function
+  ExtractImagesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-extract-images'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ExtractImagesRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref ExtractImagesPackageKey
+      Environment:
+        Variables:
+          SOURCE_S3_BUCKET: !Ref PdfStorageBucket
+          DESTINATION_S3_BUCKET: !Ref ImageStorageBucket
+          PDF_STORAGE_BUCKET: !Ref PdfStorageBucket
+          IMAGE_STORAGE_BUCKET: !Ref ImageStorageBucket
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+Outputs:
+  # S3 Bucket Outputs
+  PdfStorageBucketName:
+    Description: Name of the PDF storage S3 bucket
+    Value: !Ref PdfStorageBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PdfStorageBucket'
+
+  ImageStorageBucketName:
+    Description: Name of the image storage S3 bucket
+    Value: !Ref ImageStorageBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ImageStorageBucket'
+
+  CodeStorageBucketName:
+    Description: Name of the code storage S3 bucket
+    Value: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+    Export:
+      Name: !Sub '${AWS::StackName}-CodeStorageBucket'
+
+  # Lambda Function Outputs
+  OakPdfProcessorFunctionName:
+    Description: Name of the Oak PDF Processor Lambda function
+    Value: !Ref OakPdfProcessorFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-OakPdfProcessorFunction'
+
+  OakPdfProcessorFunctionArn:
+    Description: ARN of the Oak PDF Processor Lambda function
+    Value: !GetAtt OakPdfProcessorFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OakPdfProcessorFunctionArn'
+
+  DescribeQuizFunctionName:
+    Description: Name of the Describe Quiz Lambda function
+    Value: !Ref DescribeQuizFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-DescribeQuizFunction'
+
+  DescribeQuizFunctionArn:
+    Description: ARN of the Describe Quiz Lambda function
+    Value: !GetAtt DescribeQuizFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DescribeQuizFunctionArn'
+
+  CreateNewImageFunctionName:
+    Description: Name of the Create New Image Lambda function
+    Value: !Ref CreateNewImageFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-CreateNewImageFunction'
+
+  CreateNewImageFunctionArn:
+    Description: ARN of the Create New Image Lambda function
+    Value: !GetAtt CreateNewImageFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CreateNewImageFunctionArn'
+
+  ExtractImagesFunctionName:
+    Description: Name of the Extract Images Lambda function
+    Value: !Ref ExtractImagesFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-ExtractImagesFunction'
+
+  ExtractImagesFunctionArn:
+    Description: ARN of the Extract Images Lambda function
+    Value: !GetAtt ExtractImagesFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ExtractImagesFunctionArn'
+
+  # IAM Role Outputs
+  OakPdfProcessorRoleArn:
+    Description: ARN of the Oak PDF Processor IAM role
+    Value: !GetAtt OakPdfProcessorRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OakPdfProcessorRoleArn'
+
+  DescribeQuizRoleArn:
+    Description: ARN of the Describe Quiz IAM role
+    Value: !GetAtt DescribeQuizRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DescribeQuizRoleArn'
+
+  CreateNewImageRoleArn:
+    Description: ARN of the Create New Image IAM role
+    Value: !GetAtt CreateNewImageRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CreateNewImageRoleArn'
+
+  ExtractImagesRoleArn:
+    Description: ARN of the Extract Images IAM role
+    Value: !GetAtt ExtractImagesRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ExtractImagesRoleArn'
