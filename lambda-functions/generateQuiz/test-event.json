@@ -1,0 +1,11 @@
+{
+  "quiz_data": {
+    "paste-lesson-slug-here": {
+      "starterQuiz": [],
+      "exitQuiz": []
+    }
+  },
+  "subject": "maths",
+  "key_stage": "ks3",
+  "units": ["place-value"]
+}

@@ -55,6 +55,21 @@ Parameters:
     Description: S3 key for extractImages deployment package
     Default: 'packages/extractImages.zip'
 
+  FetchLessonsPackageKey:
+    Type: String
+    Description: S3 key for fetchLessons deployment package
+    Default: 'packages/fetchLessons.zip'
+
+  FetchQuizDataPackageKey:
+    Type: String
+    Description: S3 key for fetchQuizData deployment package
+    Default: 'packages/fetchQuizData.zip'
+
+  GenerateQuizPackageKey:
+    Type: String
+    Description: S3 key for generateQuiz deployment package
+    Default: 'packages/generateQuiz.zip'
+
 Conditions:
   CreateCodeBucket: !Equals [!Ref CodeStorageBucket, '']
 
@@ -86,6 +101,28 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub '${AWS::StackName}-image-storage'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  QuizStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-quiz-storage'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -229,6 +266,69 @@ Resources:
                 Resource: 
                   - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-canvas-v1:0'
 
+  # Fetch Lessons Role
+  FetchLessonsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-fetch-lessons-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # Fetch Quiz Data Role
+  FetchQuizDataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-fetch-quiz-data-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # Generate Quiz Role
+  GenerateQuizRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-generate-quiz-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockNovaLiteAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/us.amazon.nova-lite-v1:0'
+        - PolicyName: S3QuizStorageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub '${QuizStorageBucket.Arn}/*'
+
   # Extract Images Role
   ExtractImagesRole:
     Type: AWS::IAM::Role
@@ -341,6 +441,59 @@ Resources:
       MemorySize: !Ref LambdaMemorySize
       Timeout: !Ref LambdaTimeout
 
+  # Fetch Lessons Function
+  FetchLessonsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-fetch-lessons'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt FetchLessonsRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref FetchLessonsPackageKey
+      Environment:
+        Variables:
+          OAK_API_KEY: !Ref OakApiKey
+          OAK_API_URL: !Ref OakApiUrl
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+  # Fetch Quiz Data Function
+  FetchQuizDataFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-fetch-quiz-data'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt FetchQuizDataRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref FetchQuizDataPackageKey
+      Environment:
+        Variables:
+          OAK_API_KEY: !Ref OakApiKey
+          OAK_API_URL: !Ref OakApiUrl
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
+  # Generate Quiz Function
+  GenerateQuizFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-generate-quiz'
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt GenerateQuizRole.Arn
+      Code:
+        S3Bucket: !If [CreateCodeBucket, !Ref CodeStorageBucketResource, !Ref CodeStorageBucket]
+        S3Key: !Ref GenerateQuizPackageKey
+      Environment:
+        Variables:
+          QUIZ_STORAGE_BUCKET: !Ref QuizStorageBucket
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: !Ref LambdaTimeout
+
 Outputs:
   # S3 Bucket Outputs
   PdfStorageBucketName:
@@ -434,3 +587,67 @@ Outputs:
     Value: !GetAtt ExtractImagesRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-ExtractImagesRoleArn'
+
+  # Quiz Storage Bucket Output
+  QuizStorageBucketName:
+    Description: Name of the quiz storage S3 bucket
+    Value: !Ref QuizStorageBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-QuizStorageBucket'
+
+  # Fetch Lessons Function Outputs
+  FetchLessonsFunctionName:
+    Description: Name of the Fetch Lessons Lambda function
+    Value: !Ref FetchLessonsFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchLessonsFunction'
+
+  FetchLessonsFunctionArn:
+    Description: ARN of the Fetch Lessons Lambda function
+    Value: !GetAtt FetchLessonsFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchLessonsFunctionArn'
+
+  FetchLessonsRoleArn:
+    Description: ARN of the Fetch Lessons IAM role
+    Value: !GetAtt FetchLessonsRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchLessonsRoleArn'
+
+  # Fetch Quiz Data Function Outputs
+  FetchQuizDataFunctionName:
+    Description: Name of the Fetch Quiz Data Lambda function
+    Value: !Ref FetchQuizDataFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchQuizDataFunction'
+
+  FetchQuizDataFunctionArn:
+    Description: ARN of the Fetch Quiz Data Lambda function
+    Value: !GetAtt FetchQuizDataFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchQuizDataFunctionArn'
+
+  FetchQuizDataRoleArn:
+    Description: ARN of the Fetch Quiz Data IAM role
+    Value: !GetAtt FetchQuizDataRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FetchQuizDataRoleArn'
+
+  # Generate Quiz Function Outputs
+  GenerateQuizFunctionName:
+    Description: Name of the Generate Quiz Lambda function
+    Value: !Ref GenerateQuizFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-GenerateQuizFunction'
+
+  GenerateQuizFunctionArn:
+    Description: ARN of the Generate Quiz Lambda function
+    Value: !GetAtt GenerateQuizFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-GenerateQuizFunctionArn'
+
+  GenerateQuizRoleArn:
+    Description: ARN of the Generate Quiz IAM role
+    Value: !GetAtt GenerateQuizRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-GenerateQuizRoleArn'

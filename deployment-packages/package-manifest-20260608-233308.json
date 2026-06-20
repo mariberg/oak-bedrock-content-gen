@@ -1,0 +1,12 @@
+{
+  "timestamp": "20260608-233308",
+  "packages": {
+    "oak-pdf-processor": "oak-pdf-processor-20260608-233308.zip",
+    "describeQuiz": "describeQuiz-20260608-233308.zip",
+    "createNewImage": "createNewImage-20260608-233308.zip",
+    "extractImages": "extractImages-20260608-233308.zip",
+    "fetchLessons": "fetchLessons-20260608-233308.zip",
+    "fetchQuizData": "fetchQuizData-20260608-233308.zip",
+    "generateQuiz": "generateQuiz-20260608-233308.zip"
+  }
+}

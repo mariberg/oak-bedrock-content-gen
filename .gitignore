@@ -65,3 +65,5 @@ parameters.json
 *-parameters.json
 *.local.json
 deployment-info-*.json
+
+*.zip

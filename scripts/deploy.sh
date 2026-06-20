@@ -230,6 +230,15 @@ for func, package in data['packages'].items():
                     "extractImages")
                         EXTRACT_IMAGES_S3_KEY="$s3_key"
                         ;;
+                    "fetchLessons")
+                        FETCH_LESSONS_S3_KEY="$s3_key"
+                        ;;
+                    "fetchQuizData")
+                        FETCH_QUIZ_DATA_S3_KEY="$s3_key"
+                        ;;
+                    "generateQuiz")
+                        GENERATE_QUIZ_S3_KEY="$s3_key"
+                        ;;
                 esac
             else
                 log_warn "Package file not found: $local_path"
@@ -258,6 +267,9 @@ deploy_stack() {
     [ -n "$DESCRIBE_QUIZ_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=DescribeQuizPackageKey,ParameterValue=$DESCRIBE_QUIZ_S3_KEY"
     [ -n "$CREATE_NEW_IMAGE_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=CreateNewImagePackageKey,ParameterValue=$CREATE_NEW_IMAGE_S3_KEY"
     [ -n "$EXTRACT_IMAGES_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=ExtractImagesPackageKey,ParameterValue=$EXTRACT_IMAGES_S3_KEY"
+    [ -n "$FETCH_LESSONS_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=FetchLessonsPackageKey,ParameterValue=$FETCH_LESSONS_S3_KEY"
+    [ -n "$FETCH_QUIZ_DATA_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=FetchQuizDataPackageKey,ParameterValue=$FETCH_QUIZ_DATA_S3_KEY"
+    [ -n "$GENERATE_QUIZ_S3_KEY" ] && CF_PARAMETERS="$CF_PARAMETERS ParameterKey=GenerateQuizPackageKey,ParameterValue=$GENERATE_QUIZ_S3_KEY"
     
     # Read additional parameters from file
     if [ -f "$PARAMETERS_FILE" ]; then

@@ -132,7 +132,7 @@ main() {
     log_info "=== Packaging Python Functions ==="
     
     # Array of Python function names
-    PYTHON_FUNCTIONS=("describeQuiz" "createNewImage" "extractImages")
+    PYTHON_FUNCTIONS=("describeQuiz" "createNewImage" "extractImages" "fetchLessons" "fetchQuizData" "generateQuiz")
     
     for func in "${PYTHON_FUNCTIONS[@]}"; do
         if [ -d "$LAMBDA_FUNCTIONS_DIR/$func" ]; then
@@ -148,6 +148,18 @@ main() {
                 "extractImages")
                     package_python_function "$func"
                     EXTRACT_IMAGES_PACKAGE="extractImages-${TIMESTAMP}.zip"
+                    ;;
+                "fetchLessons")
+                    package_python_function "$func"
+                    FETCH_LESSONS_PACKAGE="fetchLessons-${TIMESTAMP}.zip"
+                    ;;
+                "fetchQuizData")
+                    package_python_function "$func"
+                    FETCH_QUIZ_DATA_PACKAGE="fetchQuizData-${TIMESTAMP}.zip"
+                    ;;
+                "generateQuiz")
+                    package_python_function "$func"
+                    GENERATE_QUIZ_PACKAGE="generateQuiz-${TIMESTAMP}.zip"
                     ;;
             esac
         else
@@ -166,7 +178,10 @@ main() {
     "oak-pdf-processor": "${OAK_PDF_PROCESSOR_PACKAGE:-""}",
     "describeQuiz": "${DESCRIBE_QUIZ_PACKAGE:-""}",
     "createNewImage": "${CREATE_NEW_IMAGE_PACKAGE:-""}",
-    "extractImages": "${EXTRACT_IMAGES_PACKAGE:-""}"
+    "extractImages": "${EXTRACT_IMAGES_PACKAGE:-""}",
+    "fetchLessons": "${FETCH_LESSONS_PACKAGE:-""}",
+    "fetchQuizData": "${FETCH_QUIZ_DATA_PACKAGE:-""}",
+    "generateQuiz": "${GENERATE_QUIZ_PACKAGE:-""}"
   }
 }
 EOF
